@@ -472,9 +472,22 @@ function fillSelect(id, def) {
 
 function bindSlider(rangeId, numId, min, max) {
   const r = $(rangeId), n = $(numId);
-  const clamp = v => Math.min(max, Math.max(min, v));
-  r.oninput = () => { n.value = r.value; };
-  n.oninput = () => { r.value = clamp(+n.value); n.value = r.value; };
+  const getMax = () => Math.min(max, Number(r.max) || max);
+  const clamp = v => Math.min(getMax(), Math.max(min, Math.round(Number(v) / 5) * 5));
+  const syncPreview = () => {
+    if (rangeId === 'secondRoundMin' && typeof updateRoundPreview === 'function') {
+      updateRoundPreview();
+    }
+  };
+  r.oninput = () => {
+    n.value = r.value;
+    syncPreview();
+  };
+  n.oninput = () => {
+    r.value = clamp(n.value);
+    n.value = r.value;
+    syncPreview();
+  };
 }
 
 /* ===== CARD TOGGLE ===== */
