@@ -647,8 +647,11 @@ function run() {
     leftover = remain - base * regCount;
   }
 
-  // 余りを振り分けるインデックス列を生成（通常の1周制のみ）
-  const extraSlots = twoRound ? 0 : Math.round(leftover / 5);
+  // B2Bへの余り加算がOFFなら、余りをREG DJの1周目に振り分ける
+  const addRemainderToB2B = $('b2bAddRemainder').checked;
+  const extraSlots = twoRound
+    ? (!addRemainderToB2B ? Math.round(leftover / 5) : 0)
+    : Math.round(leftover / 5);
 
   if (extraMode === 'first') {
     // 先頭から順に
@@ -744,12 +747,13 @@ function run() {
   extraIdx.forEach(i => { if (i >= 0 && i < regCount) djDur[i] += 5; });
 
   const scheduleDJNames = twoRound ? [...djNames, ...djNames] : djNames;
+  const firstRoundDur = new Array(regCount).fill(base);
+  extraIdx.forEach(i => { if (i >= 0 && i < regCount) firstRoundDur[i] += 5; });
   const scheduleDJDur = twoRound
-    ? [...new Array(regCount).fill(base), ...new Array(regCount).fill(secondRoundMin)]
+    ? [...firstRoundDur, ...new Array(regCount).fill(secondRoundMin)]
     : djDur;
 
-  // 2周制で生じた端数はB2Bに上乗せ
-  const addRemainderToB2B = $('b2bAddRemainder').checked;
+  // 余り加算ONならB2Bへ、OFFなら1周目のREG DJへ振り分け
   const actualB2BMin = b2bEnabled ? b2bMin + (twoRound && addRemainderToB2B ? leftover : 0) : 0;
 
   // ゲスト・ライブ名
@@ -775,11 +779,8 @@ function run() {
     liveArr,  lCount, lMin, liveStartMin,
   });
 
-  // 加算OFFの場合、余り時間は予備時間として確保し、B2Bは設定時間どおりにする
+  // B2Bは設定時間（または余り加算後の時間）で最後に配置
   if (b2bEnabled) {
-    if (twoRound && !addRemainderToB2B && leftover > 0) {
-      slots.push({ t: scheduleEndMin - leftover, name: '予備時間', dur: leftover });
-    }
     slots.push({ t: scheduleEndMin, name: 'B2B', dur: actualB2BMin });
   }
 
