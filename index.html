@@ -576,8 +576,10 @@ function updateRoundPreview() {
     $('secondRoundMinNum').value = maxSecond;
   }
   const actualSecond = parseInt($('secondRoundMin').value || '30');
+  const firstRound = Math.floor((end - start - fixed - regCount * actualSecond) / regCount / 5) * 5;
+  const b2bRemainder = end - start - fixed - regCount * (firstRound + actualSecond);
   preview.textContent = perDJ >= 10
-    ? `1周目：約${perDJ - actualSecond}分 ／ 2周目：${actualSecond}分（余り時間の振り分けにより1周目が一部DJで＋5分）`
+    ? `1周目：${firstRound}分（全員共通） ／ 2周目：${actualSecond}分 ／ B2B：${$('b2bEnabled').checked ? parseInt($('b2bMin').value || '30') + b2bRemainder : 0}分`
     : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
 }
 
@@ -617,14 +619,29 @@ function run() {
     return;
   }
 
-  // DJ持ち時間を5分単位で均等分配
-  const base = Math.floor(remain / regCount / 5) * 5;
-  let leftover = remain - base * regCount;
+  const twoRound = $('twoRound').checked;
+  const secondRoundMin = twoRound ? parseInt($('secondRoundMin').value) : 0;
   const extraMode = $('extraMode').value;
 
-  // 余りを振り分けるインデックス列を生成
-  const extraSlots = Math.round(leftover / 5);
+  // 2周制では1周目を全員同じ時間にし、5分単位の余りはB2Bへ加算する
+  let base;
+  let leftover;
   let extraIdx = [];
+  if (twoRound) {
+    const firstRoundPool = remain - regCount * secondRoundMin;
+    if (firstRoundPool < regCount * 5) {
+      showError('2周目の持ち時間が長すぎます。1周目に全員最低5分残るように調整してください。');
+      return;
+    }
+    base = Math.floor(firstRoundPool / regCount / 5) * 5;
+    leftover = firstRoundPool - base * regCount;
+  } else {
+    base = Math.floor(remain / regCount / 5) * 5;
+    leftover = remain - base * regCount;
+  }
+
+  // 余りを振り分けるインデックス列を生成（通常の1周制のみ）
+  const extraSlots = twoRound ? 0 : Math.round(leftover / 5);
 
   if (extraMode === 'first') {
     // 先頭から順に
@@ -719,20 +736,13 @@ function run() {
   const djDur = new Array(regCount).fill(base);
   extraIdx.forEach(i => { if (i >= 0 && i < regCount) djDur[i] += 5; });
 
-  // 2周制：2周目は全員共通、1周目は各DJの合計持ち時間から自動算出
-  const twoRound = $('twoRound').checked;
-  const secondRoundMin = twoRound ? parseInt($('secondRoundMin').value) : 0;
-  if (twoRound && (secondRoundMin < 5 || djDur.some(d => d < secondRoundMin + 5))) {
-    showError('2周目の持ち時間が長すぎます。1周目に最低5分残るように調整してください。');
-    return;
-  }
-
-  const scheduleDJNames = twoRound
-    ? [...djNames, ...djNames]
-    : djNames;
+  const scheduleDJNames = twoRound ? [...djNames, ...djNames] : djNames;
   const scheduleDJDur = twoRound
-    ? [...djDur.map(d => d - secondRoundMin), ...new Array(regCount).fill(secondRoundMin)]
+    ? [...new Array(regCount).fill(base), ...new Array(regCount).fill(secondRoundMin)]
     : djDur;
+
+  // 2周制で生じた端数はB2Bに上乗せ
+  const actualB2BMin = b2bEnabled ? b2bMin + (twoRound ? leftover : 0) : 0;
 
   // ゲスト・ライブ名
   const guestArr = getGuestNames().slice(0, gCount);
@@ -749,16 +759,17 @@ function run() {
   if (liveStartMin  < startMin) liveStartMin  += 1440;
 
   // スケジュール組み立て
+  const scheduleEndMin = endMin - actualB2BMin;
   const slots = buildSlots({
-    startMin, endMin,
+    startMin, endMin: scheduleEndMin,
     djNames: scheduleDJNames, djDur: scheduleDJDur,
     guestArr, guestDurArr, gCount, gMin, guestStartMin,
     liveArr,  lCount, lMin, liveStartMin,
   });
 
-  // B2Bは必ず最後に配置
+  // B2Bは余り時間を加算して必ず最後に配置
   if (b2bEnabled) {
-    slots.push({ t: endMin - b2bMin, name: 'B2B', dur: b2bMin });
+    slots.push({ t: scheduleEndMin, name: 'B2B', dur: actualB2BMin });
   }
 
   if (!slots.length) {
