@@ -371,7 +371,7 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
     <span>ゲスト</span><span class="chevron">▼</span>
   </div>
   <div class="card-body">
-    <label>持ち時間（分）</label>
+    <label>新規ゲストの初期持ち時間（分）</label>
     <div class="slider-row">
       <input type="range" id="guestMin" min="10" max="120" step="5" value="40">
       <input type="number" id="guestMinNum" min="10" max="120" value="40">
@@ -520,7 +520,8 @@ function addGuest(name = '', duration = null) {
   row.innerHTML = `
     <span class="drag-handle">⠿</span>
     <input class="guest-name" type="text" placeholder="ゲスト名" value="${name}">
-    <input class="guest-duration" type="number" min="5" max="300" step="5" value="${defaultDuration}" aria-label="持ち時間（分）" style="width:68px;flex:0 0 68px;text-align:center;padding:9px 4px;">
+    <input class="guest-duration" type="number" min="5" max="300" step="5" value="${defaultDuration}" aria-label="持ち時間（分）" style="width:58px;flex:0 0 58px;text-align:center;padding:9px 4px;">
+    <span style="font-size:12px;color:var(--muted);margin-left:-5px;">分</span>
     <button class="del-btn" onclick="this.parentNode.remove()">×</button>
   `;
   row.querySelector('.guest-duration').addEventListener('input', updateRoundPreview);
