@@ -630,7 +630,8 @@ function run() {
     } else {
       const gMin2 = parseInt($('guestMin').value);
       const lMin2 = parseInt($('liveMin').value);
-      const fixedMin2 = gCnt * gMin2 + lCnt * lMin2;
+      const b2bMin2 = $('b2bEnabled').checked ? parseInt($('b2bMin').value) : 0;
+      const fixedMin2 = gCnt * gMin2 + lCnt * lMin2 + b2bMin2;
       const remain2 = (toMin($('end').value) <= toMin($('start').value)
         ? toMin($('end').value) + 1440 : toMin($('end').value))
         - toMin($('start').value) - fixedMin2;
