@@ -1121,6 +1121,8 @@ window.onload = () => {
     $('roundSettings').style.display = $('twoRound').checked ? 'block' : 'none';
     updateRoundPreview();
   });
+  $('remainderTarget').querySelector('option[value="b2b"]').disabled = !$('b2bEnabled').checked;
+  if (!$('b2bEnabled').checked && $('remainderTarget').value === 'b2b') $('remainderTarget').value = 'first';
   $('b2bEnabled').addEventListener('change', () => {
     $('b2bSettings').style.display = $('b2bEnabled').checked ? 'block' : 'none';
     const target = $('remainderTarget');
