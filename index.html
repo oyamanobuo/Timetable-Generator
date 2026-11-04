@@ -342,6 +342,9 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
         <input type="range" id="b2bMin" min="5" max="300" step="5" value="30">
         <input type="number" id="b2bMinNum" min="5" max="300" step="5" value="30">
       </div>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;color:var(--text);font-size:13px;">
+        <input type="checkbox" id="b2bAddRemainder" checked style="width:18px;height:18px;accent-color:var(--accent);"> 余り時間をB2Bに加算する
+      </label>
     </div>
 
     <label>余り時間の振り分け先</label>
@@ -578,8 +581,12 @@ function updateRoundPreview() {
   const actualSecond = parseInt($('secondRoundMin').value || '30');
   const firstRound = Math.floor((end - start - fixed - regCount * actualSecond) / regCount / 5) * 5;
   const b2bRemainder = end - start - fixed - regCount * (firstRound + actualSecond);
+  const addRemainder = $('b2bAddRemainder')?.checked !== false;
+  const previewB2B = $('b2bEnabled').checked
+    ? parseInt($('b2bMin').value || '30') + (addRemainder ? b2bRemainder : 0)
+    : 0;
   preview.textContent = perDJ >= 10
-    ? `1周目：${firstRound}分（全員共通） ／ 2周目：${actualSecond}分 ／ B2B：${$('b2bEnabled').checked ? parseInt($('b2bMin').value || '30') + b2bRemainder : 0}分`
+    ? `1周目：${firstRound}分（全員共通） ／ 2周目：${actualSecond}分 ／ B2B：${previewB2B}分${$('b2bEnabled').checked && !addRemainder && b2bRemainder > 0 ? ` ／ 予備時間：${b2bRemainder}分` : ''}`
     : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
 }
 
@@ -742,7 +749,8 @@ function run() {
     : djDur;
 
   // 2周制で生じた端数はB2Bに上乗せ
-  const actualB2BMin = b2bEnabled ? b2bMin + (twoRound ? leftover : 0) : 0;
+  const addRemainderToB2B = $('b2bAddRemainder').checked;
+  const actualB2BMin = b2bEnabled ? b2bMin + (twoRound && addRemainderToB2B ? leftover : 0) : 0;
 
   // ゲスト・ライブ名
   const guestArr = getGuestNames().slice(0, gCount);
@@ -767,8 +775,11 @@ function run() {
     liveArr,  lCount, lMin, liveStartMin,
   });
 
-  // B2Bは余り時間を加算して必ず最後に配置
+  // 加算OFFの場合、余り時間は予備時間として確保し、B2Bは設定時間どおりにする
   if (b2bEnabled) {
+    if (twoRound && !addRemainderToB2B && leftover > 0) {
+      slots.push({ t: scheduleEndMin - b2bMin - leftover, name: '予備時間', dur: leftover });
+    }
     slots.push({ t: scheduleEndMin, name: 'B2B', dur: actualB2BMin });
   }
 
@@ -1036,6 +1047,7 @@ function captureState() {
     secondRoundMin: $('secondRoundMin').value,
     b2bEnabled: $('b2bEnabled').checked,
     b2bMin:     $('b2bMin').value,
+    b2bAddRemainder: $('b2bAddRemainder').checked,
     djNames:    getDJNames(),
     guestNames: getGuestNames(),
     guestDurations: getGuestDurations(),
@@ -1062,6 +1074,7 @@ function loadFromHistory(h) {
   $('b2bEnabled').checked = !!h.b2bEnabled;
   $('b2bMin').value = h.b2bMin || 30;
   $('b2bMinNum').value = h.b2bMin || 30;
+  $('b2bAddRemainder').checked = h.b2bAddRemainder !== false;
   $('b2bSettings').style.display = h.b2bEnabled ? 'block' : 'none';
   $('guestMin').value  = h.guestMin;
   $('guestMinNum').value = h.guestMin;
@@ -1101,6 +1114,7 @@ window.onload = () => {
     $('b2bSettings').style.display = $('b2bEnabled').checked ? 'block' : 'none';
     updateRoundPreview();
   });
+  $('b2bAddRemainder').addEventListener('change', updateRoundPreview);
   ['start','end','regCount','guestMin','liveMin','b2bMin'].forEach(id => {
     $(id).addEventListener('input', updateRoundPreview);
     $(id).addEventListener('change', updateRoundPreview);
