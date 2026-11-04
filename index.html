@@ -325,10 +325,10 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
       <input type="checkbox" id="twoRound" style="width:18px;height:18px;accent-color:var(--accent);"> REG DJを2周させる
     </label>
     <div id="roundSettings" style="display:none;background:var(--card2);padding:10px 12px;border-radius:8px;margin-top:10px;">
-      <label>1周目の持ち時間（1人あたり）</label>
+      <label>2周目の持ち時間（1人あたり）</label>
       <div class="slider-row">
-        <input type="range" id="firstRoundMin" min="5" max="240" step="5" value="30">
-        <input type="number" id="firstRoundMinNum" min="5" max="240" step="5" value="30">
+        <input type="range" id="secondRoundMin" min="5" max="240" step="5" value="30">
+        <input type="number" id="secondRoundMinNum" min="5" max="240" step="5" value="30">
       </div>
       <div id="roundPreview" style="font-size:12px;color:var(--muted);margin-top:8px;">2周目：自動計算</div>
     </div>
@@ -543,17 +543,17 @@ function updateRoundPreview() {
     + lives * parseInt($('liveMin').value || '30')
     + ($('b2bEnabled').checked ? parseInt($('b2bMin').value || '30') : 0);
   const perDJ = Math.floor((end - start - fixed) / regCount / 5) * 5;
-  const first = parseInt($('firstRoundMin').value || '30');
-  const maxFirst = Math.max(0, perDJ - 5);
-  $('firstRoundMin').max = Math.max(5, maxFirst);
-  $('firstRoundMinNum').max = Math.max(5, maxFirst);
-  if (first > maxFirst && maxFirst >= 5) {
-    $('firstRoundMin').value = maxFirst;
-    $('firstRoundMinNum').value = maxFirst;
+  const second = parseInt($('secondRoundMin').value || '30');
+  const maxSecond = Math.max(0, perDJ - 5);
+  $('secondRoundMin').max = Math.max(5, maxSecond);
+  $('secondRoundMinNum').max = Math.max(5, maxSecond);
+  if (second > maxSecond && maxSecond >= 5) {
+    $('secondRoundMin').value = maxSecond;
+    $('secondRoundMinNum').value = maxSecond;
   }
-  const actualFirst = parseInt($('firstRoundMin').value || '30');
+  const actualSecond = parseInt($('secondRoundMin').value || '30');
   preview.textContent = perDJ >= 10
-    ? `1周目：${actualFirst}分 ／ 2周目：約${perDJ - actualFirst}分（余り時間の振り分けにより一部DJは＋5分）`
+    ? `1周目：約${perDJ - actualSecond}分 ／ 2周目：${actualSecond}分（余り時間の振り分けにより1周目が一部DJで＋5分）`
     : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
 }
 
@@ -690,11 +690,11 @@ function run() {
   const djDur = new Array(regCount).fill(base);
   extraIdx.forEach(i => { if (i >= 0 && i < regCount) djDur[i] += 5; });
 
-  // 2周制：1周目は全員共通、2周目は各DJの合計持ち時間から自動算出
+  // 2周制：2周目は全員共通、1周目は各DJの合計持ち時間から自動算出
   const twoRound = $('twoRound').checked;
-  const firstRoundMin = twoRound ? parseInt($('firstRoundMin').value) : 0;
-  if (twoRound && (firstRoundMin < 5 || djDur.some(d => d < firstRoundMin + 5))) {
-    showError('1周目の持ち時間が長すぎます。2周目に最低5分残るように調整してください。');
+  const secondRoundMin = twoRound ? parseInt($('secondRoundMin').value) : 0;
+  if (twoRound && (secondRoundMin < 5 || djDur.some(d => d < secondRoundMin + 5))) {
+    showError('2周目の持ち時間が長すぎます。1周目に最低5分残るように調整してください。');
     return;
   }
 
@@ -702,7 +702,7 @@ function run() {
     ? [...djNames, ...djNames]
     : djNames;
   const scheduleDJDur = twoRound
-    ? [...new Array(regCount).fill(firstRoundMin), ...djDur.map(d => d - firstRoundMin)]
+    ? [...djDur.map(d => d - secondRoundMin), ...new Array(regCount).fill(secondRoundMin)]
     : djDur;
 
   // ゲスト・ライブ名
@@ -986,7 +986,7 @@ function captureState() {
     regCount:   $('regCount').value,
     extraMode:  $('extraMode').value,
     twoRound:   $('twoRound').checked,
-    firstRoundMin: $('firstRoundMin').value,
+    secondRoundMin: $('secondRoundMin').value,
     b2bEnabled: $('b2bEnabled').checked,
     b2bMin:     $('b2bMin').value,
     djNames:    getDJNames(),
@@ -1008,8 +1008,8 @@ function loadFromHistory(h) {
   $('regCountNum').value = h.regCount;
   $('extraMode').value = h.extraMode || 'first';
   $('twoRound').checked = !!h.twoRound;
-  $('firstRoundMin').value = h.firstRoundMin || 30;
-  $('firstRoundMinNum').value = h.firstRoundMin || 30;
+  $('secondRoundMin').value = h.secondRoundMin || h.firstRoundMin || 30;
+  $('secondRoundMinNum').value = h.secondRoundMin || h.firstRoundMin || 30;
   $('roundSettings').style.display = h.twoRound ? 'block' : 'none';
   $('b2bEnabled').checked = !!h.b2bEnabled;
   $('b2bMin').value = h.b2bMin || 30;
@@ -1042,7 +1042,7 @@ window.onload = () => {
   bindSlider('regCount',   'regCountNum',   1, 20);
   bindSlider('guestMin',   'guestMinNum',  10, 120);
   bindSlider('liveMin',    'liveMinNum',   10, 120);
-  bindSlider('firstRoundMin', 'firstRoundMinNum', 5, 240);
+  bindSlider('secondRoundMin', 'secondRoundMinNum', 5, 240);
   bindSlider('b2bMin', 'b2bMinNum', 5, 300);
 
   $('twoRound').addEventListener('change', () => {
@@ -1057,8 +1057,8 @@ window.onload = () => {
     $(id).addEventListener('input', updateRoundPreview);
     $(id).addEventListener('change', updateRoundPreview);
   });
-  $('firstRoundMin').addEventListener('input', updateRoundPreview);
-  $('firstRoundMinNum').addEventListener('input', updateRoundPreview);
+  $('secondRoundMin').addEventListener('input', updateRoundPreview);
+  $('secondRoundMinNum').addEventListener('input', updateRoundPreview);
   $('guestList').addEventListener('DOMSubtreeModified', updateRoundPreview);
   $('liveList').addEventListener('DOMSubtreeModified', updateRoundPreview);
   updateRoundPreview();
