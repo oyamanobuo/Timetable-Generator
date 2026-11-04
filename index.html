@@ -778,7 +778,7 @@ function run() {
   // 加算OFFの場合、余り時間は予備時間として確保し、B2Bは設定時間どおりにする
   if (b2bEnabled) {
     if (twoRound && !addRemainderToB2B && leftover > 0) {
-      slots.push({ t: scheduleEndMin - b2bMin - leftover, name: '予備時間', dur: leftover });
+      slots.push({ t: scheduleEndMin - leftover, name: '予備時間', dur: leftover });
     }
     slots.push({ t: scheduleEndMin, name: 'B2B', dur: actualB2BMin });
   }
