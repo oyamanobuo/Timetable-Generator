@@ -586,7 +586,7 @@ function updateRoundPreview() {
     ? parseInt($('b2bMin').value || '30') + (addRemainder ? b2bRemainder : 0)
     : 0;
   preview.textContent = perDJ >= 10
-    ? `1周目：${firstRound}分（全員共通） ／ 2周目：${actualSecond}分 ／ B2B：${previewB2B}分${$('b2bEnabled').checked && !addRemainder && b2bRemainder > 0 ? ` ／ 予備時間：${b2bRemainder}分` : ''}`
+    ? `1周目：${firstRound}分${$('b2bEnabled').checked && !addRemainder && b2bRemainder > 0 ? '（余りは一部DJに＋5分）' : '（全員共通）'} ／ 2周目：${actualSecond}分 ／ B2B：${previewB2B}分`
     : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
 }
 
