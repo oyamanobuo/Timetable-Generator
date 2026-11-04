@@ -321,6 +321,29 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
       <input type="range" id="regCount" min="1" max="20" value="5">
       <input type="number" id="regCountNum" min="1" max="20" value="5">
     </div>
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;color:var(--text);font-size:13px;">
+      <input type="checkbox" id="twoRound" style="width:18px;height:18px;accent-color:var(--accent);"> REG DJを2周させる
+    </label>
+    <div id="roundSettings" style="display:none;background:var(--card2);padding:10px 12px;border-radius:8px;margin-top:10px;">
+      <label>1周目の持ち時間（1人あたり）</label>
+      <div class="slider-row">
+        <input type="range" id="firstRoundMin" min="5" max="240" step="5" value="30">
+        <input type="number" id="firstRoundMinNum" min="5" max="240" step="5" value="30">
+      </div>
+      <div id="roundPreview" style="font-size:12px;color:var(--muted);margin-top:8px;">2周目：自動計算</div>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;color:var(--text);font-size:13px;margin-top:18px;">
+      <input type="checkbox" id="b2bEnabled" style="width:18px;height:18px;accent-color:var(--accent);"> 最後にB2Bを入れる
+    </label>
+    <div id="b2bSettings" style="display:none;background:var(--card2);padding:10px 12px;border-radius:8px;margin-top:10px;">
+      <label>B2Bの持ち時間（分）</label>
+      <div class="slider-row">
+        <input type="range" id="b2bMin" min="5" max="300" step="5" value="30">
+        <input type="number" id="b2bMinNum" min="5" max="300" step="5" value="30">
+      </div>
+    </div>
+
     <label>余り時間の振り分け先</label>
     <select id="extraMode">
       <option value="first">先頭DJ優先</option>
@@ -507,6 +530,33 @@ function getLiveNames() {
   return [...$('liveList').querySelectorAll('input')].map(i => i.value.trim() || 'LIVE');
 }
 
+function updateRoundPreview() {
+  const preview = $('roundPreview');
+  if (!preview) return;
+  const start = toMin($('start').value || '20:00');
+  let end = toMin($('end').value || '24:00');
+  if (end <= start) end += 1440;
+  const regCount = Math.max(1, parseInt($('regCount').value || '1'));
+  const guests = $('guestList').querySelectorAll('.dj-row').length;
+  const lives = $('liveList').querySelectorAll('.dj-row').length;
+  const fixed = guests * parseInt($('guestMin').value || '40')
+    + lives * parseInt($('liveMin').value || '30')
+    + ($('b2bEnabled').checked ? parseInt($('b2bMin').value || '30') : 0);
+  const perDJ = Math.floor((end - start - fixed) / regCount / 5) * 5;
+  const first = parseInt($('firstRoundMin').value || '30');
+  const maxFirst = Math.max(0, perDJ - 5);
+  $('firstRoundMin').max = Math.max(5, maxFirst);
+  $('firstRoundMinNum').max = Math.max(5, maxFirst);
+  if (first > maxFirst && maxFirst >= 5) {
+    $('firstRoundMin').value = maxFirst;
+    $('firstRoundMinNum').value = maxFirst;
+  }
+  const actualFirst = parseInt($('firstRoundMin').value || '30');
+  preview.textContent = perDJ >= 10
+    ? `1周目：${actualFirst}分 ／ 2周目：約${perDJ - actualFirst}分（余り時間の振り分けにより一部DJは＋5分）`
+    : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
+}
+
 /* ===== MAIN LOGIC ===== */
 function run() {
   const errorEl = $('errorMsg');
@@ -527,8 +577,10 @@ function run() {
   const lCount = $('liveList').querySelectorAll('.dj-row').length;
   const lMin   = parseInt($('liveMin').value);
 
-  // ゲスト・ライブの固定時間合計
-  const fixedMin = gCount * gMin + lCount * lMin;
+  // ゲスト・ライブ・B2Bの固定時間合計
+  const b2bEnabled = $('b2bEnabled').checked;
+  const b2bMin = b2bEnabled ? parseInt($('b2bMin').value) : 0;
+  const fixedMin = gCount * gMin + lCount * lMin + b2bMin;
   const remain = totalMin - fixedMin;
 
   if (remain <= 0) {
@@ -637,6 +689,21 @@ function run() {
   const djDur = new Array(regCount).fill(base);
   extraIdx.forEach(i => { if (i >= 0 && i < regCount) djDur[i] += 5; });
 
+  // 2周制：1周目は全員共通、2周目は各DJの合計持ち時間から自動算出
+  const twoRound = $('twoRound').checked;
+  const firstRoundMin = twoRound ? parseInt($('firstRoundMin').value) : 0;
+  if (twoRound && (firstRoundMin < 5 || djDur.some(d => d < firstRoundMin + 5))) {
+    showError('1周目の持ち時間が長すぎます。2周目に最低5分残るように調整してください。');
+    return;
+  }
+
+  const scheduleDJNames = twoRound
+    ? [...djNames, ...djNames]
+    : djNames;
+  const scheduleDJDur = twoRound
+    ? [...new Array(regCount).fill(firstRoundMin), ...djDur.map(d => d - firstRoundMin)]
+    : djDur;
+
   // ゲスト・ライブ名
   const guestArr = getGuestNames().slice(0, gCount);
   while (guestArr.length < gCount) guestArr.push(`GUEST ${guestArr.length + 1}`);
@@ -652,10 +719,15 @@ function run() {
   // スケジュール組み立て
   const slots = buildSlots({
     startMin, endMin,
-    djNames, djDur,
+    djNames: scheduleDJNames, djDur: scheduleDJDur,
     guestArr, gCount, gMin, guestStartMin,
     liveArr,  lCount, lMin, liveStartMin,
   });
+
+  // B2Bは必ず最後に配置
+  if (b2bEnabled) {
+    slots.push({ t: endMin - b2bMin, name: 'B2B', dur: b2bMin });
+  }
 
   if (!slots.length) {
     showError('スケジュールを生成できませんでした。');
@@ -912,6 +984,10 @@ function captureState() {
     end:        $('end').value,
     regCount:   $('regCount').value,
     extraMode:  $('extraMode').value,
+    twoRound:   $('twoRound').checked,
+    firstRoundMin: $('firstRoundMin').value,
+    b2bEnabled: $('b2bEnabled').checked,
+    b2bMin:     $('b2bMin').value,
     djNames:    getDJNames(),
     guestNames: getGuestNames(),
     liveNames:  getLiveNames(),
@@ -930,6 +1006,14 @@ function loadFromHistory(h) {
   $('regCount').value  = h.regCount;
   $('regCountNum').value = h.regCount;
   $('extraMode').value = h.extraMode || 'first';
+  $('twoRound').checked = !!h.twoRound;
+  $('firstRoundMin').value = h.firstRoundMin || 30;
+  $('firstRoundMinNum').value = h.firstRoundMin || 30;
+  $('roundSettings').style.display = h.twoRound ? 'block' : 'none';
+  $('b2bEnabled').checked = !!h.b2bEnabled;
+  $('b2bMin').value = h.b2bMin || 30;
+  $('b2bMinNum').value = h.b2bMin || 30;
+  $('b2bSettings').style.display = h.b2bEnabled ? 'block' : 'none';
   $('guestMin').value  = h.guestMin;
   $('guestMinNum').value = h.guestMin;
   $('liveMin').value   = h.liveMin;
@@ -957,6 +1041,26 @@ window.onload = () => {
   bindSlider('regCount',   'regCountNum',   1, 20);
   bindSlider('guestMin',   'guestMinNum',  10, 120);
   bindSlider('liveMin',    'liveMinNum',   10, 120);
+  bindSlider('firstRoundMin', 'firstRoundMinNum', 5, 240);
+  bindSlider('b2bMin', 'b2bMinNum', 5, 300);
+
+  $('twoRound').addEventListener('change', () => {
+    $('roundSettings').style.display = $('twoRound').checked ? 'block' : 'none';
+    updateRoundPreview();
+  });
+  $('b2bEnabled').addEventListener('change', () => {
+    $('b2bSettings').style.display = $('b2bEnabled').checked ? 'block' : 'none';
+    updateRoundPreview();
+  });
+  ['start','end','regCount','guestMin','liveMin','b2bMin'].forEach(id => {
+    $(id).addEventListener('input', updateRoundPreview);
+    $(id).addEventListener('change', updateRoundPreview);
+  });
+  $('firstRoundMin').addEventListener('input', updateRoundPreview);
+  $('firstRoundMinNum').addEventListener('input', updateRoundPreview);
+  $('guestList').addEventListener('DOMSubtreeModified', updateRoundPreview);
+  $('liveList').addEventListener('DOMSubtreeModified', updateRoundPreview);
+  updateRoundPreview();
 
   // DJ並び替え
   new Sortable($('djList'),    { animation: 150, handle: '.drag-handle' });
