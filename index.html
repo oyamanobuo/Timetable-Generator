@@ -513,14 +513,17 @@ function getDJNames() {
   return [...$('djList').querySelectorAll('input')].map(i => i.value.trim() || 'DJ');
 }
 
-function addGuest(name = '') {
+function addGuest(name = '', duration = null) {
   const row = document.createElement('div');
   row.className = 'dj-row';
+  const defaultDuration = duration || $('guestMin').value || 40;
   row.innerHTML = `
     <span class="drag-handle">⠿</span>
-    <input type="text" placeholder="ゲスト名" value="${name}">
+    <input class="guest-name" type="text" placeholder="ゲスト名" value="${name}">
+    <input class="guest-duration" type="number" min="5" max="300" step="5" value="${defaultDuration}" aria-label="持ち時間（分）" style="width:68px;flex:0 0 68px;text-align:center;padding:9px 4px;">
     <button class="del-btn" onclick="this.parentNode.remove()">×</button>
   `;
+  row.querySelector('.guest-duration').addEventListener('input', updateRoundPreview);
   $('guestList').appendChild(row);
 }
 
@@ -536,7 +539,14 @@ function addLive(name = '') {
 }
 
 function getGuestNames() {
-  return [...$('guestList').querySelectorAll('input')].map(i => i.value.trim() || 'GUEST');
+  return [...$('guestList').querySelectorAll('.guest-name')].map(i => i.value.trim() || 'GUEST');
+}
+
+function getGuestDurations() {
+  return [...$('guestList').querySelectorAll('.guest-duration')].map(i => {
+    const value = Math.round((parseInt(i.value) || 40) / 5) * 5;
+    return Math.max(5, Math.min(300, value));
+  });
 }
 
 function getLiveNames() {
@@ -550,9 +560,9 @@ function updateRoundPreview() {
   let end = toMin($('end').value || '24:00');
   if (end <= start) end += 1440;
   const regCount = Math.max(1, parseInt($('regCount').value || '1'));
-  const guests = $('guestList').querySelectorAll('.dj-row').length;
+  const guestTotal = getGuestDurations().reduce((sum, min) => sum + min, 0);
   const lives = $('liveList').querySelectorAll('.dj-row').length;
-  const fixed = guests * parseInt($('guestMin').value || '40')
+  const fixed = guestTotal
     + lives * parseInt($('liveMin').value || '30')
     + ($('b2bEnabled').checked ? parseInt($('b2bMin').value || '30') : 0);
   const perDJ = Math.floor((end - start - fixed) / regCount / 5) * 5;
@@ -586,6 +596,7 @@ function run() {
   const djNames = getDJNames();
 
   const gCount = $('guestList').querySelectorAll('.dj-row').length;
+  const guestDurations = getGuestDurations();
   const gMin   = parseInt($('guestMin').value);
   const lCount = $('liveList').querySelectorAll('.dj-row').length;
   const lMin   = parseInt($('liveMin').value);
@@ -593,7 +604,7 @@ function run() {
   // ゲスト・ライブ・B2Bの固定時間合計
   const b2bEnabled = $('b2bEnabled').checked;
   const b2bMin = b2bEnabled ? parseInt($('b2bMin').value) : 0;
-  const fixedMin = gCount * gMin + lCount * lMin + b2bMin;
+  const fixedMin = guestDurations.reduce((sum, min) => sum + min, 0) + lCount * lMin + b2bMin;
   const remain = totalMin - fixedMin;
 
   if (remain <= 0) {
@@ -641,10 +652,10 @@ function run() {
       // イベントなし → 先頭と末尾
       for (let i = 0; i < extraSlots; i++) extraIdx.push(i % 2 === 0 ? 0 : regCount - 1);
     } else {
-      const gMin2 = parseInt($('guestMin').value);
+      const guestDurations2 = getGuestDurations();
       const lMin2 = parseInt($('liveMin').value);
       const b2bMin2 = $('b2bEnabled').checked ? parseInt($('b2bMin').value) : 0;
-      const fixedMin2 = gCnt * gMin2 + lCnt * lMin2 + b2bMin2;
+      const fixedMin2 = guestDurations2.reduce((sum, min) => sum + min, 0) + lCnt * lMin2 + b2bMin2;
       const remain2 = (toMin($('end').value) <= toMin($('start').value)
         ? toMin($('end').value) + 1440 : toMin($('end').value))
         - toMin($('start').value) - fixedMin2;
@@ -656,7 +667,11 @@ function run() {
       let lSt = toMin($('liveStart').value);
       if (gSt < startAbs) gSt += 1440;
       if (lSt < startAbs) lSt += 1440;
-      for (let i = 0; i < gCnt; i++) evTargets.push(gSt + i * gMin2);
+      let guestOffset = 0;
+      for (let i = 0; i < gCnt; i++) {
+        evTargets.push(gSt + guestOffset);
+        guestOffset += guestDurations2[i] || 40;
+      }
       for (let i = 0; i < lCnt; i++) evTargets.push(lSt + i * lMin2);
       evTargets.sort((a, b) => a - b);
 
@@ -720,7 +735,9 @@ function run() {
 
   // ゲスト・ライブ名
   const guestArr = getGuestNames().slice(0, gCount);
+  const guestDurArr = guestDurations.slice(0, gCount);
   while (guestArr.length < gCount) guestArr.push(`GUEST ${guestArr.length + 1}`);
+  while (guestDurArr.length < gCount) guestDurArr.push(gMin);
   const liveArr = getLiveNames().slice(0, lCount);
   while (liveArr.length < lCount) liveArr.push(`LIVE ${liveArr.length + 1}`);
 
@@ -734,7 +751,7 @@ function run() {
   const slots = buildSlots({
     startMin, endMin,
     djNames: scheduleDJNames, djDur: scheduleDJDur,
-    guestArr, gCount, gMin, guestStartMin,
+    guestArr, guestDurArr, gCount, gMin, guestStartMin,
     liveArr,  lCount, lMin, liveStartMin,
   });
 
@@ -758,14 +775,19 @@ function run() {
   saveToHistory(captureState());
 }
 
-function buildSlots({ startMin, endMin, djNames, djDur, guestArr, gCount, gMin, guestStartMin, liveArr, lCount, lMin, liveStartMin }) {
+function buildSlots({ startMin, endMin, djNames, djDur, guestArr, guestDurArr, gCount, gMin, guestStartMin, liveArr, lCount, lMin, liveStartMin }) {
   const slots = [];
   let t = startMin;
   let di = 0;
 
   // ゲスト・ライブを目安時刻順にリスト化
   const events = [];
-  for (let i = 0; i < gCount; i++) events.push({ target: guestStartMin + i * gMin, name: guestArr[i], dur: gMin });
+  let guestOffset = 0;
+  for (let i = 0; i < gCount; i++) {
+    const duration = guestDurArr[i] || gMin;
+    events.push({ target: guestStartMin + guestOffset, name: guestArr[i], dur: duration });
+    guestOffset += duration;
+  }
   for (let i = 0; i < lCount; i++) events.push({ target: liveStartMin  + i * lMin,  name: liveArr[i],  dur: lMin  });
   events.sort((a, b) => a.target - b.target);
 
@@ -1004,6 +1026,7 @@ function captureState() {
     b2bMin:     $('b2bMin').value,
     djNames:    getDJNames(),
     guestNames: getGuestNames(),
+    guestDurations: getGuestDurations(),
     liveNames:  getLiveNames(),
     guestMin:   $('guestMin').value,
     liveMin:    $('liveMin').value,
@@ -1038,7 +1061,7 @@ function loadFromHistory(h) {
   $('djList').innerHTML = '';
   (h.djNames || []).forEach(n => addDJ(n));
   $('guestList').innerHTML = '';
-  (h.guestNames || []).forEach(n => addGuest(n));
+  (h.guestNames || []).forEach((n, i) => addGuest(n, h.guestDurations ? h.guestDurations[i] : h.guestMin));
   $('liveList').innerHTML = '';
   (h.liveNames || []).forEach(n => addLive(n));
 }
