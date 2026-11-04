@@ -330,6 +330,12 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
         <input type="range" id="secondRoundMin" min="5" max="240" step="5" value="30">
         <input type="number" id="secondRoundMinNum" min="5" max="240" step="5" value="30">
       </div>
+      <label>余り時間の振り分け先</label>
+      <select id="remainderTarget">
+        <option value="b2b">B2Bに加算</option>
+        <option value="first">1周目のREG DJに振り分け</option>
+        <option value="second">2周目のREG DJに振り分け</option>
+      </select>
       <div id="roundPreview" style="font-size:12px;color:var(--muted);margin-top:8px;">2周目：自動計算</div>
     </div>
 
@@ -342,9 +348,6 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
         <input type="range" id="b2bMin" min="5" max="300" step="5" value="30">
         <input type="number" id="b2bMinNum" min="5" max="300" step="5" value="30">
       </div>
-      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;color:var(--text);font-size:13px;">
-        <input type="checkbox" id="b2bAddRemainder" checked style="width:18px;height:18px;accent-color:var(--accent);"> 余り時間をB2Bに加算する
-      </label>
     </div>
 
     <label>余り時間の振り分け先</label>
@@ -581,12 +584,12 @@ function updateRoundPreview() {
   const actualSecond = parseInt($('secondRoundMin').value || '30');
   const firstRound = Math.floor((end - start - fixed - regCount * actualSecond) / regCount / 5) * 5;
   const b2bRemainder = end - start - fixed - regCount * (firstRound + actualSecond);
-  const addRemainder = $('b2bAddRemainder')?.checked !== false;
+  const target = $('remainderTarget')?.value || 'b2b';
   const previewB2B = $('b2bEnabled').checked
-    ? parseInt($('b2bMin').value || '30') + (addRemainder ? b2bRemainder : 0)
+    ? parseInt($('b2bMin').value || '30') + (target === 'b2b' ? b2bRemainder : 0)
     : 0;
   preview.textContent = perDJ >= 10
-    ? `1周目：${firstRound}分${$('b2bEnabled').checked && !addRemainder && b2bRemainder > 0 ? '（余りは一部DJに＋5分）' : '（全員共通）'} ／ 2周目：${actualSecond}分 ／ B2B：${previewB2B}分`
+    ? `1周目：${firstRound}分 ／ 2周目：${actualSecond}分 ／ B2B：${previewB2B}分（余り：${target === 'b2b' ? 'B2B' : target === 'first' ? '1周目' : '2周目'}）`
     : '時間が足りません。イベント時間・DJ人数・B2B時間を調整してください。';
 }
 
@@ -647,10 +650,10 @@ function run() {
     leftover = remain - base * regCount;
   }
 
-  // B2Bへの余り加算がOFFなら、余りをREG DJの1周目に振り分ける
-  const addRemainderToB2B = $('b2bAddRemainder').checked;
+  // 2周制では選択した周またはB2Bへ余りを振り分ける
+  const remainderTarget = $('remainderTarget').value;
   const extraSlots = twoRound
-    ? (!addRemainderToB2B ? Math.round(leftover / 5) : 0)
+    ? (remainderTarget === 'b2b' ? 0 : Math.round(leftover / 5))
     : Math.round(leftover / 5);
 
   if (extraMode === 'first') {
@@ -748,13 +751,18 @@ function run() {
 
   const scheduleDJNames = twoRound ? [...djNames, ...djNames] : djNames;
   const firstRoundDur = new Array(regCount).fill(base);
-  extraIdx.forEach(i => { if (i >= 0 && i < regCount) firstRoundDur[i] += 5; });
+  const secondRoundDur = new Array(regCount).fill(secondRoundMin);
+  if (twoRound && remainderTarget === 'first') {
+    extraIdx.forEach(i => { if (i >= 0 && i < regCount) firstRoundDur[i] += 5; });
+  } else if (twoRound && remainderTarget === 'second') {
+    extraIdx.forEach(i => { if (i >= 0 && i < regCount) secondRoundDur[i] += 5; });
+  }
   const scheduleDJDur = twoRound
-    ? [...firstRoundDur, ...new Array(regCount).fill(secondRoundMin)]
+    ? [...firstRoundDur, ...secondRoundDur]
     : djDur;
 
-  // 余り加算ONならB2Bへ、OFFなら1周目のREG DJへ振り分け
-  const actualB2BMin = b2bEnabled ? b2bMin + (twoRound && addRemainderToB2B ? leftover : 0) : 0;
+  // B2B加算を選択した場合のみ余りをB2Bへ加える
+  const actualB2BMin = b2bEnabled ? b2bMin + (twoRound && remainderTarget === 'b2b' ? leftover : 0) : 0;
 
   // ゲスト・ライブ名
   const guestArr = getGuestNames().slice(0, gCount);
@@ -1048,7 +1056,7 @@ function captureState() {
     secondRoundMin: $('secondRoundMin').value,
     b2bEnabled: $('b2bEnabled').checked,
     b2bMin:     $('b2bMin').value,
-    b2bAddRemainder: $('b2bAddRemainder').checked,
+    remainderTarget: $('remainderTarget').value,
     djNames:    getDJNames(),
     guestNames: getGuestNames(),
     guestDurations: getGuestDurations(),
@@ -1075,8 +1083,10 @@ function loadFromHistory(h) {
   $('b2bEnabled').checked = !!h.b2bEnabled;
   $('b2bMin').value = h.b2bMin || 30;
   $('b2bMinNum').value = h.b2bMin || 30;
-  $('b2bAddRemainder').checked = h.b2bAddRemainder !== false;
+  $('remainderTarget').value = h.remainderTarget || (h.b2bAddRemainder === false ? 'first' : 'b2b');
   $('b2bSettings').style.display = h.b2bEnabled ? 'block' : 'none';
+  $('remainderTarget').querySelector('option[value="b2b"]').disabled = !h.b2bEnabled;
+  if (!h.b2bEnabled && $('remainderTarget').value === 'b2b') $('remainderTarget').value = 'first';
   $('guestMin').value  = h.guestMin;
   $('guestMinNum').value = h.guestMin;
   $('liveMin').value   = h.liveMin;
@@ -1113,8 +1123,12 @@ window.onload = () => {
   });
   $('b2bEnabled').addEventListener('change', () => {
     $('b2bSettings').style.display = $('b2bEnabled').checked ? 'block' : 'none';
+    const target = $('remainderTarget');
+    target.querySelector('option[value="b2b"]').disabled = !$('b2bEnabled').checked;
+    if (!$('b2bEnabled').checked && target.value === 'b2b') target.value = 'first';
     updateRoundPreview();
   });
+  $('remainderTarget').addEventListener('change', updateRoundPreview);
   $('b2bAddRemainder').addEventListener('change', updateRoundPreview);
   ['start','end','regCount','guestMin','liveMin','b2bMin'].forEach(id => {
     $(id).addEventListener('input', updateRoundPreview);
