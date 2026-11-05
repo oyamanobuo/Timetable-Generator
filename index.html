@@ -154,7 +154,8 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
   margin-top: 8px;
   cursor: grab;
 }
-.dj-row:active { cursor: grabbing; }\n.dj-row.is-dragging { opacity: 0.55; }
+.dj-row:active { cursor: grabbing; }
+.dj-row.is-dragging { opacity: 0.55; }
 .dj-row .drag-handle {
   color: var(--text);
   font-size: 25px;
@@ -170,8 +171,7 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
   border-radius: 8px;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-user-drag: element;
-  touch-action: auto;
+  touch-action: none;
   line-height: 1;
 }
 .dj-row .drag-handle:active {
@@ -541,7 +541,7 @@ function addDJ(name = '') {
   const row = document.createElement('div');
   row.className = 'dj-row';
   row.innerHTML = `
-    <span class="drag-handle" draggable="true">⠿</span>
+    <span class="drag-handle">⠿</span>
     <input type="text" placeholder="DJ 名" value="${name}">
     <button type="button" class="move-btn" aria-label="上へ移動" title="上へ" onclick="moveDJ(this, -1)">▲</button>
     <button type="button" class="move-btn" aria-label="下へ移動" title="下へ" onclick="moveDJ(this, 1)">▼</button>
@@ -576,49 +576,49 @@ function setupDJPointerDrag() {
   const list = $('djList');
   let draggedRow = null;
 
-  // HTML5標準ドラッグ＆ドロップで並べ替える
-  list.querySelectorAll('.drag-handle').forEach(handle => {
-    handle.setAttribute('draggable', 'true');
-  });
+  const getY = event => event.touches ? event.touches[0].clientY : event.clientY;
 
-  list.addEventListener('dragstart', event => {
+  const startDrag = event => {
     const handle = event.target.closest('.drag-handle');
-    if (!handle) {
-      event.preventDefault();
-      return;
-    }
+    if (!handle) return;
+    if (event.type === 'mousedown' && event.button !== 0) return;
     draggedRow = handle.closest('.dj-row');
-    if (!draggedRow) {
-      event.preventDefault();
-      return;
-    }
+    if (!draggedRow) return;
+    event.preventDefault();
     draggedRow.classList.add('is-dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', 'dj-row');
-  });
+  };
 
-  list.addEventListener('dragover', event => {
+  const moveDrag = event => {
     if (!draggedRow) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    const targetRow = event.target.closest('.dj-row');
-    if (!targetRow || targetRow === draggedRow || targetRow.parentElement !== list) return;
-    const rect = targetRow.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    list.insertBefore(draggedRow, after ? targetRow.nextSibling : targetRow);
-  });
+    if (event.cancelable) event.preventDefault();
+    const y = getY(event);
+    const rows = [...list.querySelectorAll('.dj-row')].filter(row => row !== draggedRow);
+    let before = null;
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) {
+        before = row;
+        break;
+      }
+    }
+    if (before) list.insertBefore(draggedRow, before);
+    else list.appendChild(draggedRow);
+  };
 
-  list.addEventListener('drop', event => {
+  const endDrag = () => {
     if (!draggedRow) return;
-    event.preventDefault();
-    refreshDJMoveButtons();
-  });
-
-  list.addEventListener('dragend', () => {
-    if (draggedRow) draggedRow.classList.remove('is-dragging');
+    draggedRow.classList.remove('is-dragging');
     draggedRow = null;
     refreshDJMoveButtons();
-  });
+  };
+
+  list.addEventListener('mousedown', startDrag);
+  document.addEventListener('mousemove', moveDrag);
+  document.addEventListener('mouseup', endDrag);
+  list.addEventListener('touchstart', startDrag, { passive: false });
+  document.addEventListener('touchmove', moveDrag, { passive: false });
+  document.addEventListener('touchend', endDrag);
+  document.addEventListener('touchcancel', endDrag);
 }
 function getDJNames() {
   return [...$('djList').querySelectorAll('input')].map(i => i.value.trim() || 'DJ');
