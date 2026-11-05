@@ -156,11 +156,27 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
 }
 .dj-row:active { cursor: grabbing; }
 .dj-row .drag-handle {
-  color: var(--muted);
-  font-size: 16px;
+  color: var(--text);
+  font-size: 25px;
   cursor: grab;
-  padding: 0 4px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #292929;
+  border: 1px solid #454545;
+  border-radius: 8px;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  line-height: 1;
+}
+.dj-row .drag-handle:active {
+  background: #3a3a3a;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .dj-row input {
   flex: 1;
