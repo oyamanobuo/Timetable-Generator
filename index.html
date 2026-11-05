@@ -578,8 +578,9 @@ function setupDJPointerDrag() {
 
   list.addEventListener('pointerdown', event => {
     const handle = event.target.closest('.drag-handle');
-    if (!handle || event.button !== 0) return;
+    if (!handle || (event.pointerType === 'mouse' && event.button !== 0)) return;
     draggedRow = handle.closest('.dj-row');
+    if (!draggedRow) return;
     pointerId = event.pointerId;
     draggedRow.classList.add('is-dragging');
     event.preventDefault();
@@ -588,12 +589,19 @@ function setupDJPointerDrag() {
   document.addEventListener('pointermove', event => {
     if (!draggedRow || event.pointerId !== pointerId) return;
     event.preventDefault();
-    const under = document.elementFromPoint(event.clientX, event.clientY);
-    const targetRow = under && under.closest('.dj-row');
-    if (!targetRow || targetRow === draggedRow || targetRow.parentElement !== list) return;
-    const rect = targetRow.getBoundingClientRect();
-    const insertAfter = event.clientY > rect.top + rect.height / 2;
-    list.insertBefore(draggedRow, insertAfter ? targetRow.nextSibling : targetRow);
+
+    // elementFromPointに依存せず、各行の中央位置で挿入先を判定する
+    const otherRows = [...list.querySelectorAll('.dj-row')].filter(row => row !== draggedRow);
+    let insertBefore = null;
+    for (const row of otherRows) {
+      const rect = row.getBoundingClientRect();
+      if (event.clientY < rect.top + rect.height / 2) {
+        insertBefore = row;
+        break;
+      }
+    }
+    if (insertBefore) list.insertBefore(draggedRow, insertBefore);
+    else list.appendChild(draggedRow);
   }, { passive: false });
 
   const finishDrag = event => {
@@ -606,7 +614,6 @@ function setupDJPointerDrag() {
   document.addEventListener('pointerup', finishDrag);
   document.addEventListener('pointercancel', finishDrag);
 }
-
 function getDJNames() {
   return [...$('djList').querySelectorAll('input')].map(i => i.value.trim() || 'DJ');
 }
