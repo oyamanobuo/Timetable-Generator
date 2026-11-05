@@ -154,7 +154,7 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
   margin-top: 8px;
   cursor: grab;
 }
-.dj-row:active { cursor: grabbing; }
+.dj-row:active { cursor: grabbing; }\n.dj-row.is-dragging { opacity: 0.55; }
 .dj-row .drag-handle {
   color: var(--text);
   font-size: 25px;
@@ -569,6 +569,42 @@ function refreshDJMoveButtons() {
     if (buttons[0]) buttons[0].disabled = index === 0;
     if (buttons[1]) buttons[1].disabled = index === rows.length - 1;
   });
+}
+
+function setupDJPointerDrag() {
+  const list = $('djList');
+  let draggedRow = null;
+  let pointerId = null;
+
+  list.addEventListener('pointerdown', event => {
+    const handle = event.target.closest('.drag-handle');
+    if (!handle || event.button !== 0) return;
+    draggedRow = handle.closest('.dj-row');
+    pointerId = event.pointerId;
+    draggedRow.classList.add('is-dragging');
+    event.preventDefault();
+  });
+
+  document.addEventListener('pointermove', event => {
+    if (!draggedRow || event.pointerId !== pointerId) return;
+    event.preventDefault();
+    const under = document.elementFromPoint(event.clientX, event.clientY);
+    const targetRow = under && under.closest('.dj-row');
+    if (!targetRow || targetRow === draggedRow || targetRow.parentElement !== list) return;
+    const rect = targetRow.getBoundingClientRect();
+    const insertAfter = event.clientY > rect.top + rect.height / 2;
+    list.insertBefore(draggedRow, insertAfter ? targetRow.nextSibling : targetRow);
+  }, { passive: false });
+
+  const finishDrag = event => {
+    if (!draggedRow || (event && event.pointerId !== pointerId)) return;
+    draggedRow.classList.remove('is-dragging');
+    draggedRow = null;
+    pointerId = null;
+    refreshDJMoveButtons();
+  };
+  document.addEventListener('pointerup', finishDrag);
+  document.addEventListener('pointercancel', finishDrag);
 }
 
 function getDJNames() {
@@ -1199,7 +1235,7 @@ window.onload = () => {
   updateRoundPreview();
 
   // DJ並び替え
-  new Sortable($('djList'), { animation: 150, handle: '.drag-handle', forceFallback: true, fallbackTolerance: 3, fallbackOnBody: true, onEnd: refreshDJMoveButtons });
+  setupDJPointerDrag();
   new Sortable($('guestList'), { animation: 150, handle: '.drag-handle' });
   new Sortable($('liveList'),  { animation: 150, handle: '.drag-handle' });
 
