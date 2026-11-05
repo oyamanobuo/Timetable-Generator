@@ -1236,7 +1236,6 @@ window.onload = () => {
     updateRoundPreview();
   });
   $('remainderTarget').addEventListener('change', updateRoundPreview);
-  $('b2bAddRemainder').addEventListener('change', updateRoundPreview);
   ['start','end','regCount','guestMin','liveMin','b2bMin'].forEach(id => {
     $(id).addEventListener('input', updateRoundPreview);
     $(id).addEventListener('change', updateRoundPreview);
