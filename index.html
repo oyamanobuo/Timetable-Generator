@@ -170,7 +170,8 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
   border-radius: 8px;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
+  -webkit-user-drag: element;
+  touch-action: auto;
   line-height: 1;
 }
 .dj-row .drag-handle:active {
@@ -540,7 +541,7 @@ function addDJ(name = '') {
   const row = document.createElement('div');
   row.className = 'dj-row';
   row.innerHTML = `
-    <span class="drag-handle">⠿</span>
+    <span class="drag-handle" draggable="true">⠿</span>
     <input type="text" placeholder="DJ 名" value="${name}">
     <button type="button" class="move-btn" aria-label="上へ移動" title="上へ" onclick="moveDJ(this, -1)">▲</button>
     <button type="button" class="move-btn" aria-label="下へ移動" title="下へ" onclick="moveDJ(this, 1)">▼</button>
@@ -574,45 +575,50 @@ function refreshDJMoveButtons() {
 function setupDJPointerDrag() {
   const list = $('djList');
   let draggedRow = null;
-  let pointerId = null;
 
-  list.addEventListener('pointerdown', event => {
-    const handle = event.target.closest('.drag-handle');
-    if (!handle || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    draggedRow = handle.closest('.dj-row');
-    if (!draggedRow) return;
-    pointerId = event.pointerId;
-    draggedRow.classList.add('is-dragging');
-    event.preventDefault();
+  // HTML5標準ドラッグ＆ドロップで並べ替える
+  list.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.setAttribute('draggable', 'true');
   });
 
-  document.addEventListener('pointermove', event => {
-    if (!draggedRow || event.pointerId !== pointerId) return;
-    event.preventDefault();
-
-    // elementFromPointに依存せず、各行の中央位置で挿入先を判定する
-    const otherRows = [...list.querySelectorAll('.dj-row')].filter(row => row !== draggedRow);
-    let insertBefore = null;
-    for (const row of otherRows) {
-      const rect = row.getBoundingClientRect();
-      if (event.clientY < rect.top + rect.height / 2) {
-        insertBefore = row;
-        break;
-      }
+  list.addEventListener('dragstart', event => {
+    const handle = event.target.closest('.drag-handle');
+    if (!handle) {
+      event.preventDefault();
+      return;
     }
-    if (insertBefore) list.insertBefore(draggedRow, insertBefore);
-    else list.appendChild(draggedRow);
-  }, { passive: false });
+    draggedRow = handle.closest('.dj-row');
+    if (!draggedRow) {
+      event.preventDefault();
+      return;
+    }
+    draggedRow.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', 'dj-row');
+  });
 
-  const finishDrag = event => {
-    if (!draggedRow || (event && event.pointerId !== pointerId)) return;
-    draggedRow.classList.remove('is-dragging');
-    draggedRow = null;
-    pointerId = null;
+  list.addEventListener('dragover', event => {
+    if (!draggedRow) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const targetRow = event.target.closest('.dj-row');
+    if (!targetRow || targetRow === draggedRow || targetRow.parentElement !== list) return;
+    const rect = targetRow.getBoundingClientRect();
+    const after = event.clientY > rect.top + rect.height / 2;
+    list.insertBefore(draggedRow, after ? targetRow.nextSibling : targetRow);
+  });
+
+  list.addEventListener('drop', event => {
+    if (!draggedRow) return;
+    event.preventDefault();
     refreshDJMoveButtons();
-  };
-  document.addEventListener('pointerup', finishDrag);
-  document.addEventListener('pointercancel', finishDrag);
+  });
+
+  list.addEventListener('dragend', () => {
+    if (draggedRow) draggedRow.classList.remove('is-dragging');
+    draggedRow = null;
+    refreshDJMoveButtons();
+  });
 }
 function getDJNames() {
   return [...$('djList').querySelectorAll('input')].map(i => i.value.trim() || 'DJ');
